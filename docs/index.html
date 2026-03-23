@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pl" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kopiator kontekstu</title>
+    <meta name="description" content="Statyczne narzędzie do budowania raportu lub struktury katalogów z archiwum ZIP bez opuszczania przeglądarki.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script defer src="./app.js"></script>
+</head>
+<body>
+<div class="page">
+    <div class="shell">
+        <aside class="rail">
+            <div class="brand">
+                <p class="eyebrow">Context Builder</p>
+                <h1>Kopiator</h1>
+                <p class="lead">
+                    Minimalne narzędzie do przygotowania kontekstu dla modeli językowych.
+                </p>
+            </div>
+
+            <div class="rail-block">
+                <p class="section-label">Domyślne ignorowanie</p>
+                <div class="chip-row">
+                    <span class="chip">node_modules</span>
+                    <span class="chip">__MACOSX</span>
+                    <span class="chip">.DS_Store</span>
+                    <span class="chip">binaria</span>
+                </div>
+            </div>
+
+            <div class="rail-block">
+                <p class="section-label">Przepływ</p>
+                <ol class="steps">
+                    <li>Wczytaj ZIP</li>
+                    <li>Ustaw wykluczenia</li>
+                    <li>Wygeneruj Markdown</li>
+                </ol>
+            </div>
+
+        </aside>
+
+        <main class="workspace">
+            <header class="workspace-header">
+                <div class="workspace-heading">
+                    <p class="eyebrow">Browser only</p>
+                    <h2>ZIP in. Markdown out.</h2>
+                    <p class="signature-inline">by Michał Kuś</p>
+                </div>
+                <div class="header-actions">
+                    <button id="theme-toggle" class="secondary-button" type="button" aria-label="Przełącz motyw">
+                        <span id="theme-toggle-icon" class="theme-toggle-glyph" aria-hidden="true">☀</span>
+                    </button>
+                    <button id="generate-button" class="primary-button" type="submit" form="generator-form">
+                        Generuj wynik
+                    </button>
+                </div>
+            </header>
+
+            <section class="intro">
+                <p>
+                    Bez backendu, bez uploadu na serwer, bez marketingowego szumu. Po lewej konfiguracja,
+                    po prawej gotowy tekst do skopiowania albo pobrania.
+                </p>
+            </section>
+
+            <section class="board">
+                <section class="panel panel-form">
+                    <div class="panel-head">
+                        <div>
+                            <p class="section-label">Konfiguracja</p>
+                            <h3>Wejście i filtry</h3>
+                        </div>
+                    </div>
+
+                    <form id="generator-form" novalidate>
+                        <label class="field">
+                            <span>Archiwum ZIP</span>
+                            <input id="zip-file" name="zip-file" type="file" accept=".zip,application/zip" required>
+                            <small>Jeden plik <code>.zip</code>, przetwarzany wyłącznie lokalnie.</small>
+                        </label>
+
+                        <fieldset class="mode-picker">
+                            <legend>Tryb działania</legend>
+                            <div class="mode-grid">
+                                <label class="mode-option">
+                                    <input type="radio" name="mode" value="report" checked>
+                                    <span>Raport</span>
+                                    <small>Pełna zawartość w jednym pliku Markdown.</small>
+                                </label>
+                                <label class="mode-option">
+                                    <input type="radio" name="mode" value="structure">
+                                    <span>Struktura</span>
+                                    <small>Samo drzewo katalogów bez treści plików.</small>
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <label class="field">
+                            <span>Wykluczenia plików</span>
+                            <textarea id="excluded-files" rows="4" placeholder="np. README.md, src/generated/schema.json"></textarea>
+                            <small>Nazwy plików albo ścieżki względne, oddzielane przecinkami.</small>
+                        </label>
+
+                        <label class="field">
+                            <span>Wykluczenia folderów</span>
+                            <textarea id="excluded-folders" rows="4" placeholder="np. dist, build/cache, coverage"></textarea>
+                            <small>Nazwy katalogów albo ścieżki względne, oddzielane przecinkami.</small>
+                        </label>
+
+                        <label class="field">
+                            <span>Wykluczenia rozszerzeń</span>
+                            <input id="excluded-extensions" type="text" placeholder="np. .log, tmp, .cache">
+                            <small>Rozszerzenia z kropką albo bez niej.</small>
+                        </label>
+
+                        <div class="status-row">
+                            <p id="status-message" class="status" aria-live="polite">Czekam na archiwum ZIP.</p>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="panel panel-output">
+                    <div class="panel-head panel-head-split">
+                        <div>
+                            <p class="section-label">Wynik</p>
+                            <h3>Gotowy tekst</h3>
+                        </div>
+                        <div class="output-actions">
+                            <button id="copy-button" class="secondary-button" type="button" disabled>Kopiuj</button>
+                            <button id="download-button" class="secondary-button is-dark" type="button" disabled>Pobierz .md</button>
+                        </div>
+                    </div>
+
+                    <div class="meta-row">
+                        <span class="meta-pill">Markdown</span>
+                        <span class="meta-pill">UTF-8</span>
+                        <span class="meta-pill">Prompt-ready</span>
+                    </div>
+
+                    <label class="field output-field">
+                        <span>Wygenerowany tekst</span>
+                        <textarea id="result-output" rows="24" readonly placeholder="Tutaj pojawi się wygenerowany Markdown."></textarea>
+                    </label>
+                </section>
+            </section>
+        </main>
+    </div>
+</div>
+</body>
+</html>

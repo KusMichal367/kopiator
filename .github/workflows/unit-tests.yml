@@ -1,0 +1,25 @@
+name: Unit Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  java-console-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Ensure test runner is executable
+        run: chmod +x scripts/run-java-tests.sh
+
+      - name: Run unit tests
+        run: ./scripts/run-java-tests.sh

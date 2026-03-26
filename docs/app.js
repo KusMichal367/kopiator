@@ -212,9 +212,11 @@ async function processZipArchive(zip, originalFileName, mode, filters) {
         ? buildStructureMarkdown(rootLabel, filters, treeRoot, stats)
         : buildReportMarkdown(rootLabel, filters, includedFiles, stats);
 
+    const sourceLabel = sanitizeFileNamePart(rootLabel);
+
     return {
         markdown,
-        fileName: `${mode === "structure" ? "context-structure" : "context-report"}-${timestampForFileName()}.md`,
+        fileName: `${mode === "structure" ? "structure" : "report"}-${sourceLabel}-${timestampForFileName()}.md`,
         stats
     };
 }
@@ -503,6 +505,18 @@ function compareEntryNames(first, second) {
 
 function stripZipExtension(fileName) {
     return fileName.replace(/\.zip$/i, "") || "archiwum";
+}
+
+function sanitizeFileNamePart(value) {
+    const normalized = String(value ?? "")
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^[-.]+|[-.]+$/g, "")
+        .toLowerCase();
+
+    return normalized || "source";
 }
 
 function timestampForFileName() {

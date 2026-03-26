@@ -1,4 +1,5 @@
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -25,6 +26,10 @@ public final class ContextBuilderAppTest {
                 ContextBuilderAppTest::shouldBuildSafeMarkdownFence);
         run("language resolution matches known extensions case-insensitively",
                 ContextBuilderAppTest::shouldResolveLanguages);
+        run("output file label keeps folder name in a safe form",
+                ContextBuilderAppTest::shouldSanitizeOutputFileLabels);
+        run("output file name is stable for the same folder and mode",
+                ContextBuilderAppTest::shouldBuildStableOutputFileName);
 
         System.out.println("All ContextBuilderApp unit tests passed.");
     }
@@ -134,6 +139,23 @@ public final class ContextBuilderAppTest {
         assertEquals("javascript", ContextBuilderApp.resolveLanguage("docs/APP.JS"));
         assertEquals("markdown", ContextBuilderApp.resolveLanguage("README.md"));
         assertEquals("", ContextBuilderApp.resolveLanguage("Makefile"));
+    }
+
+    private static void shouldSanitizeOutputFileLabels() {
+        assertEquals("my-project", ContextBuilderApp.sanitizeFileNamePart("My Project"));
+        assertEquals("raport_2026", ContextBuilderApp.sanitizeFileNamePart(" raport_2026 "));
+        assertEquals("source", ContextBuilderApp.sanitizeFileNamePart("..."));
+    }
+
+    private static void shouldBuildStableOutputFileName() {
+        assertEquals(
+                "context-report-my-project.md",
+                ContextBuilderApp.buildOutputFileName(Paths.get("/tmp/My Project"), ContextBuilderApp.Mode.REPORT)
+        );
+        assertEquals(
+                "context-structure-my-project.md",
+                ContextBuilderApp.buildOutputFileName(Paths.get("/tmp/My Project"), ContextBuilderApp.Mode.STRUCTURE)
+        );
     }
 
     private static Set<String> setOf(String... values) {

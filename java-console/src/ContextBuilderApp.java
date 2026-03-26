@@ -39,8 +39,6 @@ import java.util.stream.Stream;
 public final class ContextBuilderApp {
 
     private static final String OUTPUT_DIRECTORY_NAME = "OUTPUT";
-    private static final DateTimeFormatter FILE_TIMESTAMP =
-            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final DateTimeFormatter HUMAN_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int BINARY_SNIFF_LIMIT = 4 * 1024;
@@ -86,36 +84,45 @@ public final class ContextBuilderApp {
     private void run() throws IOException {
         printHeader();
 
-        Path rootDirectory = askForDirectory();
-        Set<String> excludedFiles = askForPatterns(
-                "Wykluczenia plików (opcjonalnie, oddziel przecinkami; nazwa pliku lub ścieżka względna): ",
-                false
-        );
-        Set<String> excludedFolders = askForPatterns(
-                "Wykluczenia folderów (opcjonalnie, oddziel przecinkami; nazwa folderu lub ścieżka względna): ",
-                false
-        );
-        Set<String> excludedExtensions = askForPatterns(
-                "Wykluczenia rozszerzeń (opcjonalnie, np. .log, tmp, .cache): ",
-                true
-        );
-        Mode mode = askForMode();
-
-        ScanConfig config = new ScanConfig(
-                rootDirectory,
-                excludedFiles,
-                excludedFolders,
-                excludedExtensions,
-                mode
-        );
-
-        ScanResult result = scanDirectory(config);
         Path outputDirectory = createOutputDirectory();
-        Path outputFile = writeOutputFile(outputDirectory, config, result);
+        ScanConfig config = new ScanConfig(
+                askForDirectory(),
+                askForPatterns(
+                        "Wykluczenia plików (opcjonalnie, oddziel przecinkami; nazwa pliku lub ścieżka względna): ",
+                        false
+                ),
+                askForPatterns(
+                        "Wykluczenia folderów (opcjonalnie, oddziel przecinkami; nazwa folderu lub ścieżka względna): ",
+                        false
+                ),
+                askForPatterns(
+                        "Wykluczenia rozszerzeń (opcjonalnie, np. .log, tmp, .cache): ",
+                        true
+                ),
+                askForMode()
+        );
 
+        boolean runAgain;
+        do {
+            ScanResult result = scanDirectory(config);
+            Path outputFile = outputDirectory.resolve(buildOutputFileName(config.rootDirectory, config.mode));
+            boolean overwritingExistingFile = Files.exists(outputFile);
+            writeOutputFile(outputDirectory, config, result);
+            printRunSummary(outputDirectory, outputFile, result, overwritingExistingFile);
+            runAgain = askToRepeatWithSameConfig();
+        } while (runAgain);
+    }
+
+    private void printRunSummary(
+            Path outputDirectory,
+            Path outputFile,
+            ScanResult result,
+            boolean overwritingExistingFile
+    ) {
         System.out.println();
         System.out.println("Zakończono.");
-        System.out.println("Wynik zapisano w: " + outputFile.toAbsolutePath());
+        System.out.println((overwritingExistingFile ? "Wynik nadpisano w: " : "Wynik zapisano w: ")
+                + outputFile.toAbsolutePath());
         System.out.println("Folder wynikowy: " + outputDirectory.toAbsolutePath());
 
         if (!result.warnings.isEmpty()) {
@@ -124,6 +131,23 @@ public final class ContextBuilderApp {
             for (String warning : result.warnings) {
                 System.out.println(" - " + warning);
             }
+        }
+    }
+
+    private boolean askToRepeatWithSameConfig() throws IOException {
+        while (true) {
+            System.out.println();
+            System.out.print("Wykonać raport ponownie dla tych samych parametrów? (t/n): ");
+            String input = readRequiredLine().trim().toLowerCase(Locale.ROOT);
+
+            if ("t".equals(input) || "tak".equals(input) || "y".equals(input) || "yes".equals(input)) {
+                return true;
+            }
+            if ("n".equals(input) || "nie".equals(input) || "no".equals(input)) {
+                return false;
+            }
+
+            System.out.println("Nieprawidłowa odpowiedź. Wpisz t albo n.");
         }
     }
 
@@ -357,9 +381,7 @@ public final class ContextBuilderApp {
     }
 
     private Path writeOutputFile(Path outputDirectory, ScanConfig config, ScanResult result) throws IOException {
-        String filePrefix = config.mode == Mode.REPORT ? "context-report-" : "context-structure-";
-        String timestamp = FILE_TIMESTAMP.format(LocalDateTime.now());
-        Path outputFile = outputDirectory.resolve(filePrefix + timestamp + ".md");
+        Path outputFile = outputDirectory.resolve(buildOutputFileName(config.rootDirectory, config.mode));
 
         String markdown = config.mode == Mode.REPORT
                 ? buildReportMarkdown(config, result)
@@ -531,9 +553,30 @@ public final class ContextBuilderApp {
         return language == null ? "" : language;
     }
 
-    private String resolveRootLabel(Path rootDirectory) {
+    private static String resolveRootLabel(Path rootDirectory) {
         Path fileName = rootDirectory.getFileName();
         return fileName == null ? rootDirectory.toString() : fileName.toString();
+    }
+
+    static String sanitizeFileNamePart(String value) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isEmpty()) {
+            return "source";
+        }
+
+        normalized = normalized
+                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}._-]+", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^[-.]+|[-.]+$", "")
+                .toLowerCase(Locale.ROOT);
+
+        return normalized.isEmpty() ? "source" : normalized;
+    }
+
+    static String buildOutputFileName(Path rootDirectory, Mode mode) {
+        String sourceLabel = sanitizeFileNamePart(resolveRootLabel(rootDirectory));
+        String filePrefix = mode == Mode.REPORT ? "context-report-" : "context-structure-";
+        return filePrefix + sourceLabel + ".md";
     }
 
     private static Map<String, String> createLanguageMap() {
@@ -638,7 +681,7 @@ public final class ContextBuilderApp {
         return builder.toString();
     }
 
-    private enum Mode {
+    enum Mode {
         REPORT("Raport"),
         STRUCTURE("Struktura");
 

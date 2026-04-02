@@ -33,12 +33,12 @@ import java.util.stream.Stream;
  * Konsolowe narzędzie do budowania kontekstu dla modeli językowych.
  *
  * <p>Aplikacja skanuje wskazany katalog, wymusza ignorowanie binariów i artefaktów
- * macOS, a następnie zapisuje wynik wyłącznie do folderu OUTPUT w katalogu
- * uruchomienia programu.</p>
+ * macOS, a następnie zapisuje wynik domyślnie do folderu Downloads
+ * w katalogu domowym użytkownika.</p>
  */
 public final class ContextBuilderApp {
 
-    private static final String OUTPUT_DIRECTORY_NAME = "OUTPUT";
+    private static final String DEFAULT_OUTPUT_DIRECTORY_NAME = "Downloads";
     private static final DateTimeFormatter HUMAN_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int BINARY_SNIFF_LIMIT = 4 * 1024;
@@ -375,9 +375,13 @@ public final class ContextBuilderApp {
     }
 
     private Path createOutputDirectory() throws IOException {
-        Path workingDirectory = Paths.get("").toAbsolutePath().normalize();
-        Path outputDirectory = workingDirectory.resolve(OUTPUT_DIRECTORY_NAME);
+        Path outputDirectory = buildDefaultOutputDirectoryPath(Paths.get(System.getProperty("user.home")));
         return Files.createDirectories(outputDirectory);
+    }
+
+    static Path buildDefaultOutputDirectoryPath(Path homeDirectory) {
+        Path normalizedHomeDirectory = homeDirectory.toAbsolutePath().normalize();
+        return normalizedHomeDirectory.resolve(DEFAULT_OUTPUT_DIRECTORY_NAME);
     }
 
     private Path writeOutputFile(Path outputDirectory, ScanConfig config, ScanResult result) throws IOException {

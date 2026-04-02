@@ -30,6 +30,8 @@ public final class ContextBuilderAppTest {
                 ContextBuilderAppTest::shouldSanitizeOutputFileLabels);
         run("output file name is stable for the same folder and mode",
                 ContextBuilderAppTest::shouldBuildStableOutputFileName);
+        run("default output directory points to Downloads in the user home",
+                ContextBuilderAppTest::shouldBuildDefaultOutputDirectoryPath);
 
         System.out.println("All ContextBuilderApp unit tests passed.");
     }
@@ -155,6 +157,13 @@ public final class ContextBuilderAppTest {
         assertEquals(
                 "context-structure-my-project.md",
                 ContextBuilderApp.buildOutputFileName(Paths.get("/tmp/My Project"), ContextBuilderApp.Mode.STRUCTURE)
+        );
+    }
+
+    private static void shouldBuildDefaultOutputDirectoryPath() {
+        assertEquals(
+                Paths.get("/Users/test/Downloads").toString(),
+                ContextBuilderApp.buildDefaultOutputDirectoryPath(Paths.get("/Users/test")).toString()
         );
     }
 

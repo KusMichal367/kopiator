@@ -64,7 +64,7 @@ public final class ContextBuilderApp {
             ".midi", ".mov", ".mp3", ".mp4", ".mpeg", ".mpg", ".o", ".obj", ".ogg",
             ".otf", ".pdf", ".png", ".ppt", ".pptm", ".pptx", ".psd", ".rar", ".so",
             ".tar", ".tif", ".tiff", ".ttf", ".war", ".wav", ".webm", ".webp", ".woff",
-            ".woff2", ".xls", ".xlsb", ".xlsm", ".xlsx", ".zip"
+            ".woff2", ".xls", ".xlsb", ".xlsm", ".xlsx", ".zip", ".env"
     );
 
     private static final Map<String, String> LANGUAGE_BY_EXTENSION = createLanguageMap();
@@ -74,32 +74,55 @@ public final class ContextBuilderApp {
 
     public static void main(String[] args) {
         try {
-            new ContextBuilderApp().run();
+            new ContextBuilderApp().run(args);
+        } catch (UsageException exception) {
+            System.err.println(exception.getMessage());
+            System.err.println();
+            printUsage();
+            System.exit(2);
         } catch (IOException exception) {
             System.err.println("Nie udało się zakończyć pracy programu: " + exception.getMessage());
             System.exit(1);
         }
     }
 
-    private void run() throws IOException {
+    private void run(String[] args) throws IOException {
+        if (args.length == 0) {
+            runInteractive();
+            return;
+        }
+        if (containsHelpArgument(args)) {
+            printUsage();
+            return;
+        }
+        runFromArguments(parseCommandLineArguments(args));
+    }
+
+    private void runInteractive() throws IOException {
         printHeader();
 
         Path outputDirectory = createOutputDirectory();
+        Path rootDirectory = askForDirectory();
+        Set<String> excludedFiles = askForPatterns(
+                "Wykluczenia plików (opcjonalnie, oddziel przecinkami; nazwa pliku lub ścieżka względna): ",
+                false
+        );
+        Set<String> excludedFolders = askForPatterns(
+                "Wykluczenia folderów (opcjonalnie, oddziel przecinkami; nazwa folderu lub ścieżka względna): ",
+                false
+        );
+        Set<String> excludedExtensions = askForPatterns(
+                "Wykluczenia rozszerzeń (opcjonalnie, np. .log, tmp, .cache): ",
+                true
+        );
+        Mode mode = askForMode();
         ScanConfig config = new ScanConfig(
-                askForDirectory(),
-                askForPatterns(
-                        "Wykluczenia plików (opcjonalnie, oddziel przecinkami; nazwa pliku lub ścieżka względna): ",
-                        false
-                ),
-                askForPatterns(
-                        "Wykluczenia folderów (opcjonalnie, oddziel przecinkami; nazwa folderu lub ścieżka względna): ",
-                        false
-                ),
-                askForPatterns(
-                        "Wykluczenia rozszerzeń (opcjonalnie, np. .log, tmp, .cache): ",
-                        true
-                ),
-                askForMode()
+                rootDirectory,
+                excludedFiles,
+                excludedFolders,
+                excludedExtensions,
+                mode,
+                askForStructureFileScope(mode)
         );
 
         boolean runAgain;
@@ -111,6 +134,24 @@ public final class ContextBuilderApp {
             printRunSummary(outputDirectory, outputFile, result, overwritingExistingFile);
             runAgain = askToRepeatWithSameConfig();
         } while (runAgain);
+    }
+
+    private void runFromArguments(CommandLineOptions options) throws IOException {
+        Path outputDirectory = createOutputDirectory(options.outputDirectory);
+        ScanConfig config = new ScanConfig(
+                options.rootDirectory,
+                options.excludedFiles,
+                options.excludedFolders,
+                options.excludedExtensions,
+                options.mode,
+                options.structureFileScope
+        );
+
+        ScanResult result = scanDirectory(config);
+        Path outputFile = outputDirectory.resolve(buildOutputFileName(config.rootDirectory, config.mode));
+        boolean overwritingExistingFile = Files.exists(outputFile);
+        writeOutputFile(outputDirectory, config, result);
+        printRunSummary(outputDirectory, outputFile, result, overwritingExistingFile);
     }
 
     private void printRunSummary(
@@ -154,6 +195,7 @@ public final class ContextBuilderApp {
     private void printHeader() {
         System.out.println("=== Kopiator kontekstu dla modeli językowych ===");
         System.out.println("Domyślnie ignorowane są: node_modules, pliki binarne, __MACOSX, .DS_Store oraz pliki AppleDouble.");
+        System.out.println("W trybie struktury można wybrać pełne drzewo plików albo filtry takie jak w raporcie.");
         System.out.println();
     }
 
@@ -178,6 +220,10 @@ public final class ContextBuilderApp {
     private Set<String> askForPatterns(String prompt, boolean extensionsOnly) throws IOException {
         System.out.print(prompt);
         String input = console.readLine();
+        return parsePatterns(input, extensionsOnly);
+    }
+
+    static Set<String> parsePatterns(String input, boolean extensionsOnly) {
         if (input == null || input.trim().isEmpty()) {
             return Collections.emptySet();
         }
@@ -200,7 +246,7 @@ public final class ContextBuilderApp {
             System.out.println();
             System.out.println("Wybierz tryb działania:");
             System.out.println("1 - Raport (zawartość plików w jednym pliku Markdown)");
-            System.out.println("2 - Struktura (wyłącznie drzewo katalogów)");
+            System.out.println("2 - Struktura (drzewo katalogów z nazwami i rozmiarami plików)");
             System.out.print("Twój wybór: ");
 
             String input = readRequiredLine().trim();
@@ -212,6 +258,175 @@ public final class ContextBuilderApp {
             }
             System.out.println("Nieprawidłowy wybór. Wpisz 1 albo 2.");
         }
+    }
+
+    private StructureFileScope askForStructureFileScope(Mode mode) throws IOException {
+        if (mode != Mode.STRUCTURE) {
+            return StructureFileScope.REPORT_FILTERS;
+        }
+
+        while (true) {
+            System.out.println();
+            System.out.println("Pliki widoczne w strukturze:");
+            System.out.println("1 - Tylko pliki spełniające ograniczenia raportu");
+            System.out.println("2 - Wszystkie pliki z uwzględnionych folderów");
+            System.out.print("Twój wybór: ");
+
+            String input = readRequiredLine().trim();
+            if ("1".equals(input)) {
+                return StructureFileScope.REPORT_FILTERS;
+            }
+            if ("2".equals(input)) {
+                return StructureFileScope.ALL_FILES;
+            }
+            System.out.println("Nieprawidłowy wybór. Wpisz 1 albo 2.");
+        }
+    }
+
+    private CommandLineOptions parseCommandLineArguments(String[] args) {
+        Path rootDirectory = null;
+        Path outputDirectory = null;
+        Set<String> excludedFiles = Collections.emptySet();
+        Set<String> excludedFolders = Collections.emptySet();
+        Set<String> excludedExtensions = Collections.emptySet();
+        Mode mode = Mode.REPORT;
+        StructureFileScope structureFileScope = StructureFileScope.REPORT_FILTERS;
+
+        for (int index = 0; index < args.length; index++) {
+            String argument = args[index];
+
+            if ("--source".equals(argument) || "--directory".equals(argument)) {
+                rootDirectory = readExistingDirectory(readOptionValue(args, ++index, argument), argument);
+                continue;
+            }
+            if ("--output-dir".equals(argument)) {
+                outputDirectory = readOutputDirectory(readOptionValue(args, ++index, argument), argument);
+                continue;
+            }
+            if ("--mode".equals(argument)) {
+                mode = parseMode(readOptionValue(args, ++index, argument));
+                continue;
+            }
+            if ("--exclude-files".equals(argument)) {
+                excludedFiles = parsePatterns(readOptionValue(args, ++index, argument), false);
+                continue;
+            }
+            if ("--exclude-folders".equals(argument)) {
+                excludedFolders = parsePatterns(readOptionValue(args, ++index, argument), false);
+                continue;
+            }
+            if ("--exclude-extensions".equals(argument)) {
+                excludedExtensions = parsePatterns(readOptionValue(args, ++index, argument), true);
+                continue;
+            }
+            if ("--structure-files".equals(argument)) {
+                structureFileScope = parseStructureFileScope(readOptionValue(args, ++index, argument));
+                continue;
+            }
+
+            throw new UsageException("Nieznany argument: " + argument);
+        }
+
+        if (rootDirectory == null) {
+            throw new UsageException("Brak wymaganego argumentu: --source <katalog>");
+        }
+
+        return new CommandLineOptions(
+                rootDirectory,
+                outputDirectory,
+                excludedFiles,
+                excludedFolders,
+                excludedExtensions,
+                mode,
+                structureFileScope
+        );
+    }
+
+    private static String readOptionValue(String[] args, int index, String optionName) {
+        if (index >= args.length || args[index].startsWith("--")) {
+            throw new UsageException("Brak wartości dla opcji: " + optionName);
+        }
+        return args[index];
+    }
+
+    private static Path readExistingDirectory(String rawPath, String optionName) {
+        Path directory = readDirectoryPath(rawPath, optionName);
+        if (!Files.exists(directory)) {
+            throw new UsageException("Katalog z opcji " + optionName + " nie istnieje: " + directory);
+        }
+        if (!Files.isDirectory(directory)) {
+            throw new UsageException("Ścieżka z opcji " + optionName + " nie wskazuje katalogu: " + directory);
+        }
+        return directory;
+    }
+
+    private static Path readOutputDirectory(String rawPath, String optionName) {
+        return readDirectoryPath(rawPath, optionName);
+    }
+
+    private static Path readDirectoryPath(String rawPath, String optionName) {
+        if (rawPath == null || rawPath.trim().isEmpty()) {
+            throw new UsageException("Pusta ścieżka dla opcji: " + optionName);
+        }
+        return Paths.get(rawPath.trim()).toAbsolutePath().normalize();
+    }
+
+    private static Mode parseMode(String rawMode) {
+        String normalized = lowerCase(rawMode == null ? "" : rawMode.trim());
+        if ("report".equals(normalized) || "raport".equals(normalized) || "1".equals(normalized)) {
+            return Mode.REPORT;
+        }
+        if ("structure".equals(normalized) || "struktura".equals(normalized) || "2".equals(normalized)) {
+            return Mode.STRUCTURE;
+        }
+        throw new UsageException("Nieprawidłowy tryb: " + rawMode + ". Użyj report albo structure.");
+    }
+
+    static StructureFileScope parseStructureFileScope(String rawScope) {
+        String normalized = lowerCase(rawScope == null ? "" : rawScope.trim());
+        if ("report".equals(normalized)
+                || "raport".equals(normalized)
+                || "filtered".equals(normalized)
+                || "filtrowane".equals(normalized)
+                || "1".equals(normalized)) {
+            return StructureFileScope.REPORT_FILTERS;
+        }
+        if ("all".equals(normalized)
+                || "wszystkie".equals(normalized)
+                || "full".equals(normalized)
+                || "pelne".equals(normalized)
+                || "pełne".equals(normalized)
+                || "2".equals(normalized)) {
+            return StructureFileScope.ALL_FILES;
+        }
+        throw new UsageException("Nieprawidłowy zakres plików struktury: "
+                + rawScope
+                + ". Użyj report albo all.");
+    }
+
+    private static boolean containsHelpArgument(String[] args) {
+        for (String argument : args) {
+            if ("--help".equals(argument) || "-h".equals(argument)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void printUsage() {
+        System.out.println("Użycie:");
+        System.out.println("  java ContextBuilderApp --source <katalog> [opcje]");
+        System.out.println();
+        System.out.println("Opcje:");
+        System.out.println("  --source <katalog>              Katalog źródłowy do przeskanowania.");
+        System.out.println("  --directory <katalog>           Alias dla --source.");
+        System.out.println("  --mode <report|structure>       Tryb działania. Domyślnie: report.");
+        System.out.println("  --structure-files <report|all>  Pliki w strukturze. Domyślnie: report.");
+        System.out.println("  --output-dir <katalog>          Katalog wynikowy. Domyślnie: ~/Downloads.");
+        System.out.println("  --exclude-files <lista>         Wykluczenia plików oddzielone przecinkami.");
+        System.out.println("  --exclude-folders <lista>       Wykluczenia folderów oddzielone przecinkami.");
+        System.out.println("  --exclude-extensions <lista>    Wykluczenia rozszerzeń oddzielone przecinkami.");
+        System.out.println("  --help                          Pokaż tę pomoc.");
     }
 
     private String readRequiredLine() throws IOException {
@@ -265,10 +480,28 @@ public final class ContextBuilderApp {
                 continue;
             }
 
-            TreeNode fileNode = new TreeNode(child.getFileName().toString(), false);
+            long fileSize = readFileSize(child, relativePath, result);
+            if (fileSize < 0L) {
+                continue;
+            }
+
+            TreeNode fileNode = new TreeNode(child.getFileName().toString(), false, fileSize);
             currentNode.children.add(fileNode);
             result.fileCount++;
             result.includedFiles.add(child);
+        }
+    }
+
+    private long readFileSize(Path file, Path relativePath, ScanResult result) {
+        try {
+            return Files.size(file);
+        } catch (IOException exception) {
+            result.warnings.add("Nie udało się odczytać rozmiaru pliku: "
+                    + displayRelativePath(relativePath)
+                    + " ("
+                    + exception.getMessage()
+                    + ")");
+            return -1L;
         }
     }
 
@@ -294,6 +527,10 @@ public final class ContextBuilderApp {
     }
 
     private boolean shouldExcludeFile(Path file, Path relativePath, ScanConfig config) {
+        if (!shouldApplyReportFileFilters(config.mode, config.structureFileScope)) {
+            return false;
+        }
+
         String fileName = lowerCase(file.getFileName().toString());
         String normalizedRelativePath = normalizeRelativePath(relativePath);
         if (shouldExcludeFileByMetadata(
@@ -310,6 +547,10 @@ public final class ContextBuilderApp {
         } catch (IOException exception) {
             return true;
         }
+    }
+
+    static boolean shouldApplyReportFileFilters(Mode mode, StructureFileScope structureFileScope) {
+        return mode == Mode.REPORT || structureFileScope == StructureFileScope.REPORT_FILTERS;
     }
 
     static boolean shouldExcludeDirectoryNameOrPath(
@@ -376,6 +617,13 @@ public final class ContextBuilderApp {
 
     private Path createOutputDirectory() throws IOException {
         Path outputDirectory = buildDefaultOutputDirectoryPath(Paths.get(System.getProperty("user.home")));
+        return createOutputDirectory(outputDirectory);
+    }
+
+    private Path createOutputDirectory(Path outputDirectory) throws IOException {
+        if (outputDirectory == null) {
+            return createOutputDirectory();
+        }
         return Files.createDirectories(outputDirectory);
     }
 
@@ -436,12 +684,24 @@ public final class ContextBuilderApp {
         markdown.append("- Katalog źródłowy: `").append(config.rootDirectory).append("`\n");
         markdown.append("- Wygenerowano: `").append(HUMAN_TIMESTAMP.format(LocalDateTime.now())).append("`\n");
         markdown.append("- Tryb: `").append(config.mode.displayName).append("`\n");
+        if (config.mode == Mode.STRUCTURE) {
+            markdown.append("- Zakres plików w strukturze: `")
+                    .append(config.structureFileScope.displayName)
+                    .append("`\n");
+        }
         markdown.append("- Uwzględnione katalogi: `").append(result.directoryCount).append("`\n");
         markdown.append("- Uwzględnione pliki: `").append(result.fileCount).append("`\n");
-        markdown.append("- Wymuszone ignorowanie: `node_modules`, `__MACOSX`, `.DS_Store`, `._*`, binaria\n");
-        markdown.append("- Wykluczenia plików: `").append(formatPatternList(config.excludedFiles)).append("`\n");
+        if (shouldApplyReportFileFilters(config.mode, config.structureFileScope)) {
+            markdown.append("- Wymuszone ignorowanie: `node_modules`, `__MACOSX`, `.DS_Store`, `._*`, binaria\n");
+            markdown.append("- Wykluczenia plików: `").append(formatPatternList(config.excludedFiles)).append("`\n");
+            markdown.append("- Wykluczenia rozszerzeń: `").append(formatPatternList(config.excludedExtensions)).append("`\n");
+        } else {
+            markdown.append("- Wymuszone ignorowanie: `node_modules`, `__MACOSX`, dowiązania symboliczne\n");
+            markdown.append("- Wykluczenia plików: `nie dotyczy pełnej struktury`\n");
+            markdown.append("- Wykluczenia rozszerzeń: `nie dotyczy pełnej struktury`\n");
+        }
         markdown.append("- Wykluczenia folderów: `").append(formatPatternList(config.excludedFolders)).append("`\n");
-        markdown.append("- Wykluczenia rozszerzeń: `").append(formatPatternList(config.excludedExtensions)).append("`\n\n");
+        markdown.append("\n");
     }
 
     private String formatPatternList(Set<String> patterns) {
@@ -469,6 +729,8 @@ public final class ContextBuilderApp {
         tree.append(node.name);
         if (node.directory) {
             tree.append("/");
+        } else {
+            tree.append(" (").append(formatByteSize(node.sizeBytes)).append(")");
         }
         tree.append("\n");
 
@@ -677,6 +939,23 @@ public final class ContextBuilderApp {
         return path.toString().replace('\\', '/');
     }
 
+    static String formatByteSize(long bytes) {
+        if (bytes < 1024L) {
+            return bytes + " B";
+        }
+
+        String[] units = {"KB", "MB", "GB", "TB"};
+        double value = bytes;
+        int unitIndex = -1;
+        do {
+            value = value / 1024.0d;
+            unitIndex++;
+        } while (value >= 1024.0d && unitIndex < units.length - 1);
+
+        String pattern = value < 10.0d ? "%.1f %s" : "%.0f %s";
+        return String.format(Locale.ROOT, pattern, value, units[unitIndex]);
+    }
+
     private static String repeatCharacter(char character, int count) {
         StringBuilder builder = new StringBuilder(count);
         for (int index = 0; index < count; index++) {
@@ -696,25 +975,73 @@ public final class ContextBuilderApp {
         }
     }
 
+    enum StructureFileScope {
+        REPORT_FILTERS("takie same ograniczenia jak raport"),
+        ALL_FILES("wszystkie pliki z uwzględnionych folderów");
+
+        private final String displayName;
+
+        StructureFileScope(String displayName) {
+            this.displayName = displayName;
+        }
+    }
+
+    private static final class CommandLineOptions {
+        private final Path rootDirectory;
+        private final Path outputDirectory;
+        private final Set<String> excludedFiles;
+        private final Set<String> excludedFolders;
+        private final Set<String> excludedExtensions;
+        private final Mode mode;
+        private final StructureFileScope structureFileScope;
+
+        private CommandLineOptions(
+                Path rootDirectory,
+                Path outputDirectory,
+                Set<String> excludedFiles,
+                Set<String> excludedFolders,
+                Set<String> excludedExtensions,
+                Mode mode,
+                StructureFileScope structureFileScope
+        ) {
+            this.rootDirectory = rootDirectory;
+            this.outputDirectory = outputDirectory;
+            this.excludedFiles = excludedFiles;
+            this.excludedFolders = excludedFolders;
+            this.excludedExtensions = excludedExtensions;
+            this.mode = mode;
+            this.structureFileScope = structureFileScope;
+        }
+    }
+
+    private static final class UsageException extends RuntimeException {
+        private UsageException(String message) {
+            super(message);
+        }
+    }
+
     private static final class ScanConfig {
         private final Path rootDirectory;
         private final Set<String> excludedFiles;
         private final Set<String> excludedFolders;
         private final Set<String> excludedExtensions;
         private final Mode mode;
+        private final StructureFileScope structureFileScope;
 
         private ScanConfig(
                 Path rootDirectory,
                 Set<String> excludedFiles,
                 Set<String> excludedFolders,
                 Set<String> excludedExtensions,
-                Mode mode
+                Mode mode,
+                StructureFileScope structureFileScope
         ) {
             this.rootDirectory = rootDirectory;
             this.excludedFiles = excludedFiles;
             this.excludedFolders = excludedFolders;
             this.excludedExtensions = excludedExtensions;
             this.mode = mode;
+            this.structureFileScope = structureFileScope;
         }
     }
 
@@ -733,11 +1060,17 @@ public final class ContextBuilderApp {
     private static final class TreeNode {
         private final String name;
         private final boolean directory;
+        private final long sizeBytes;
         private final List<TreeNode> children = new ArrayList<TreeNode>();
 
         private TreeNode(String name, boolean directory) {
+            this(name, directory, 0L);
+        }
+
+        private TreeNode(String name, boolean directory, long sizeBytes) {
             this.name = name;
             this.directory = directory;
+            this.sizeBytes = sizeBytes;
         }
     }
 }

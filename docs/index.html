@@ -96,7 +96,23 @@
                                 <label class="mode-option">
                                     <input type="radio" name="mode" value="structure">
                                     <span>Struktura</span>
-                                    <small>Samo drzewo katalogów bez treści plików.</small>
+                                    <small>Drzewo katalogów z nazwami plików i rozmiarami.</small>
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="mode-picker">
+                            <legend>Pliki w strukturze</legend>
+                            <div class="mode-grid">
+                                <label class="mode-option">
+                                    <input type="radio" name="structure-files" value="report" checked>
+                                    <span>Jak w raporcie</span>
+                                    <small>Filtry plików, rozszerzeń i binariów.</small>
+                                </label>
+                                <label class="mode-option">
+                                    <input type="radio" name="structure-files" value="all">
+                                    <span>Wszystkie z folderów</span>
+                                    <small>Pełna lista plików w uwzględnionych katalogach.</small>
                                 </label>
                             </div>
                         </fieldset>

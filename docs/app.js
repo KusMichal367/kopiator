@@ -83,7 +83,9 @@ generatorForm.addEventListener("submit", async (event) => {
         return;
     }
 
-    const mode = new FormData(generatorForm).get("mode");
+    const formData = new FormData(generatorForm);
+    const mode = formData.get("mode");
+    const structureFileScope = formData.get("structure-files") ?? "report";
     const filters = {
         excludedFiles: parseList(excludedFilesInput.value, false),
         excludedFolders: parseList(excludedFoldersInput.value, false),
@@ -95,7 +97,7 @@ generatorForm.addEventListener("submit", async (event) => {
 
     try {
         const zip = await JSZip.loadAsync(zipFile);
-        const processed = await processZipArchive(zip, zipFile.name, mode, filters);
+        const processed = await processZipArchive(zip, zipFile.name, mode, filters, structureFileScope);
 
         lastGeneratedText = processed.markdown;
         lastDownloadFileName = processed.fileName;
@@ -149,11 +151,12 @@ downloadButton.addEventListener("click", () => {
     updateStatus("Plik Markdown jest gotowy do pobrania.", "success");
 });
 
-async function processZipArchive(zip, originalFileName, mode, filters) {
+async function processZipArchive(zip, originalFileName, mode, filters, structureFileScope) {
     const rootLabel = stripZipExtension(originalFileName);
     const treeRoot = createTreeNode(rootLabel, true);
     const explicitDirectories = new Set();
     const includedFiles = [];
+    const useReportFileFilters = shouldUseReportFileFilters(mode, structureFileScope);
     const zipEntries = Object.values(zip.files)
         .filter((entry) => entry.name)
         .sort((first, second) => compareEntryNames(first.name, second.name));
@@ -172,18 +175,22 @@ async function processZipArchive(zip, originalFileName, mode, filters) {
             }
             explicitDirectories.add(normalizedPath);
         } else {
-            if (shouldExcludeFilePath(normalizedPath, filters)) {
+            if (useReportFileFilters && shouldExcludeFilePath(normalizedPath, filters)) {
+                continue;
+            }
+            if (!useReportFileFilters && shouldExcludeFileDirectoryPath(normalizedPath, filters)) {
                 continue;
             }
 
             const bytes = await entry.async("uint8array");
-            if (isLikelyBinary(bytes)) {
+            if (useReportFileFilters && isLikelyBinary(bytes)) {
                 continue;
             }
 
             includedFiles.push({
                 path: normalizedPath,
-                bytes
+                bytes,
+                sizeBytes: bytes.length
             });
         }
 
@@ -198,7 +205,7 @@ async function processZipArchive(zip, originalFileName, mode, filters) {
     }
 
     for (const file of includedFiles) {
-        addPathToTree(treeRoot, file.path, false);
+        addPathToTree(treeRoot, file.path, false, file.sizeBytes);
     }
 
     sortTree(treeRoot);
@@ -209,7 +216,7 @@ async function processZipArchive(zip, originalFileName, mode, filters) {
     };
 
     const markdown = mode === "structure"
-        ? buildStructureMarkdown(rootLabel, filters, treeRoot, stats)
+        ? buildStructureMarkdown(rootLabel, filters, treeRoot, stats, structureFileScope)
         : buildReportMarkdown(rootLabel, filters, includedFiles, stats);
 
     const sourceLabel = sanitizeFileNamePart(rootLabel);
@@ -219,6 +226,10 @@ async function processZipArchive(zip, originalFileName, mode, filters) {
         fileName: `${mode === "structure" ? "structure" : "report"}-${sourceLabel}-${timestampForFileName()}.md`,
         stats
     };
+}
+
+function shouldUseReportFileFilters(mode, structureFileScope) {
+    return mode === "report" || structureFileScope === "report";
 }
 
 function shouldExcludeDirectoryPath(directoryPath, filters) {
@@ -270,6 +281,15 @@ function shouldExcludeFilePath(filePath, filters) {
     return false;
 }
 
+function shouldExcludeFileDirectoryPath(filePath, filters) {
+    const normalizedPath = normalizePathPattern(filePath);
+    const segments = normalizedPath.split("/").filter(Boolean);
+    if (segments.length <= 1) {
+        return false;
+    }
+    return shouldExcludeDirectoryPath(segments.slice(0, -1).join("/"), filters);
+}
+
 function buildReportMarkdown(rootLabel, filters, includedFiles, stats) {
     const parts = [];
     appendMetadata(parts, "Raport kontekstu", rootLabel, "Raport", filters, stats);
@@ -295,35 +315,52 @@ function buildReportMarkdown(rootLabel, filters, includedFiles, stats) {
     return `${parts.join("\n").trimEnd()}\n`;
 }
 
-function buildStructureMarkdown(rootLabel, filters, treeRoot, stats) {
+function buildStructureMarkdown(rootLabel, filters, treeRoot, stats, structureFileScope) {
     const parts = [];
-    appendMetadata(parts, "Struktura katalogów", rootLabel, "Struktura", filters, stats);
+    appendMetadata(parts, "Struktura katalogów", rootLabel, "Struktura", filters, stats, structureFileScope);
     parts.push("```text");
     parts.push(renderTree(treeRoot).trimEnd());
     parts.push("```");
     return `${parts.join("\n")}\n`;
 }
 
-function appendMetadata(parts, title, rootLabel, modeLabel, filters, stats) {
+function appendMetadata(parts, title, rootLabel, modeLabel, filters, stats, structureFileScope = "report") {
+    const useReportFileFilters = modeLabel !== "Struktura" || structureFileScope === "report";
+
     parts.push(`# ${title}`);
     parts.push("");
     parts.push(`- Źródło: \`${rootLabel}.zip\``);
     parts.push(`- Wygenerowano: \`${timestampForHumans()}\``);
     parts.push(`- Tryb: \`${modeLabel}\``);
+    if (modeLabel === "Struktura") {
+        parts.push(`- Zakres plików w strukturze: \`${formatStructureFileScope(structureFileScope)}\``);
+    }
     parts.push(`- Uwzględnione katalogi: \`${stats.directories}\``);
     parts.push(`- Uwzględnione pliki: \`${stats.files}\``);
-    parts.push("- Wymuszone ignorowanie: `node_modules`, `__MACOSX`, `.DS_Store`, `._*`, binaria");
-    parts.push(`- Wykluczenia plików: \`${formatFilterList(filters.excludedFiles)}\``);
+    if (useReportFileFilters) {
+        parts.push("- Wymuszone ignorowanie: `node_modules`, `__MACOSX`, `.DS_Store`, `._*`, binaria");
+        parts.push(`- Wykluczenia plików: \`${formatFilterList(filters.excludedFiles)}\``);
+        parts.push(`- Wykluczenia rozszerzeń: \`${formatFilterList(filters.excludedExtensions)}\``);
+    } else {
+        parts.push("- Wymuszone ignorowanie: `node_modules`, `__MACOSX`");
+        parts.push("- Wykluczenia plików: `nie dotyczy pełnej struktury`");
+        parts.push("- Wykluczenia rozszerzeń: `nie dotyczy pełnej struktury`");
+    }
     parts.push(`- Wykluczenia folderów: \`${formatFilterList(filters.excludedFolders)}\``);
-    parts.push(`- Wykluczenia rozszerzeń: \`${formatFilterList(filters.excludedExtensions)}\``);
     parts.push("");
+}
+
+function formatStructureFileScope(structureFileScope) {
+    return structureFileScope === "all"
+        ? "wszystkie pliki z uwzględnionych folderów"
+        : "takie same ograniczenia jak raport";
 }
 
 function formatFilterList(values) {
     return values.size === 0 ? "brak" : Array.from(values).join(", ");
 }
 
-function addPathToTree(rootNode, relativePath, directoryOnly) {
+function addPathToTree(rootNode, relativePath, directoryOnly, sizeBytes = 0) {
     const segments = normalizeDisplayPath(relativePath).split("/").filter(Boolean);
     let currentNode = rootNode;
 
@@ -334,8 +371,10 @@ function addPathToTree(rootNode, relativePath, directoryOnly) {
         );
 
         if (!child) {
-            child = createTreeNode(segment, isDirectory);
+            child = createTreeNode(segment, isDirectory, isDirectory ? 0 : sizeBytes);
             currentNode.children.push(child);
+        } else if (!isDirectory) {
+            child.sizeBytes = sizeBytes;
         }
 
         currentNode = child;
@@ -364,7 +403,11 @@ function renderTree(rootNode) {
 }
 
 function appendTreeLine(lines, node, prefix, isLast) {
-    lines.push(`${prefix}${isLast ? "└── " : "├── "}${node.name}${node.directory ? "/" : ""}`);
+    const label = node.directory
+        ? `${node.name}/`
+        : `${node.name} (${formatByteSize(node.sizeBytes)})`;
+
+    lines.push(`${prefix}${isLast ? "└── " : "├── "}${label}`);
     const childPrefix = `${prefix}${isLast ? "    " : "│   "}`;
 
     node.children.forEach((child, index) => {
@@ -383,10 +426,11 @@ function countTreeDirectories(rootNode) {
     return count;
 }
 
-function createTreeNode(name, directory) {
+function createTreeNode(name, directory, sizeBytes = 0) {
     return {
         name,
         directory,
+        sizeBytes,
         children: []
     };
 }
@@ -495,6 +539,24 @@ function extractExtension(filePath) {
         return "";
     }
     return fileName.slice(lastDot);
+}
+
+function formatByteSize(bytes) {
+    if (bytes < 1024) {
+        return `${bytes} B`;
+    }
+
+    const units = ["KB", "MB", "GB", "TB"];
+    let value = bytes;
+    let unitIndex = -1;
+
+    do {
+        value /= 1024;
+        unitIndex += 1;
+    } while (value >= 1024 && unitIndex < units.length - 1);
+
+    const digits = value < 10 ? 1 : 0;
+    return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
 function compareEntryNames(first, second) {

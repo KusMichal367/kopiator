@@ -12,6 +12,8 @@ public final class ContextBuilderAppTest {
     public static void main(String[] args) {
         run("normalizePathPattern trims, lowercases and normalizes separators",
                 ContextBuilderAppTest::shouldNormalizePathPatterns);
+        run("parsePatterns splits comma-separated values and skips blanks",
+                ContextBuilderAppTest::shouldParsePatternLists);
         run("normalizeExtension adds missing dot and lowercases values",
                 ContextBuilderAppTest::shouldNormalizeExtensions);
         run("extractExtension returns extension only for real suffixes",
@@ -32,6 +34,12 @@ public final class ContextBuilderAppTest {
                 ContextBuilderAppTest::shouldBuildStableOutputFileName);
         run("default output directory points to Downloads in the user home",
                 ContextBuilderAppTest::shouldBuildDefaultOutputDirectoryPath);
+        run("byte size formatting keeps structure output readable",
+                ContextBuilderAppTest::shouldFormatByteSizes);
+        run("structure file scope parser accepts report-filtered and all-files modes",
+                ContextBuilderAppTest::shouldParseStructureFileScope);
+        run("report file filters are optional only for full structure trees",
+                ContextBuilderAppTest::shouldApplyReportFileFiltersByMode);
 
         System.out.println("All ContextBuilderApp unit tests passed.");
     }
@@ -40,6 +48,14 @@ public final class ContextBuilderAppTest {
         assertEquals("folder/sub/file.txt",
                 ContextBuilderApp.normalizePathPattern(" ./Folder\\Sub/File.txt/ "));
         assertEquals("", ContextBuilderApp.normalizePathPattern("   "));
+    }
+
+    private static void shouldParsePatternLists() {
+        Set<String> patterns = ContextBuilderApp.parsePatterns(" README.md, , src\\Generated/ ", false);
+        assertEquals(setOf("readme.md", "src/generated"), patterns);
+
+        Set<String> extensions = ContextBuilderApp.parsePatterns(" log, .TMP, ", true);
+        assertEquals(setOf(".log", ".tmp"), extensions);
     }
 
     private static void shouldNormalizeExtensions() {
@@ -167,6 +183,49 @@ public final class ContextBuilderAppTest {
         );
     }
 
+    private static void shouldFormatByteSizes() {
+        assertEquals("0 B", ContextBuilderApp.formatByteSize(0L));
+        assertEquals("842 B", ContextBuilderApp.formatByteSize(842L));
+        assertEquals("1.0 KB", ContextBuilderApp.formatByteSize(1024L));
+        assertEquals("1.5 KB", ContextBuilderApp.formatByteSize(1536L));
+        assertEquals("10 KB", ContextBuilderApp.formatByteSize(10L * 1024L));
+        assertEquals("1.0 MB", ContextBuilderApp.formatByteSize(1024L * 1024L));
+    }
+
+    private static void shouldParseStructureFileScope() {
+        assertEquals(
+                ContextBuilderApp.StructureFileScope.REPORT_FILTERS,
+                ContextBuilderApp.parseStructureFileScope("report")
+        );
+        assertEquals(
+                ContextBuilderApp.StructureFileScope.REPORT_FILTERS,
+                ContextBuilderApp.parseStructureFileScope("filtrowane")
+        );
+        assertEquals(
+                ContextBuilderApp.StructureFileScope.ALL_FILES,
+                ContextBuilderApp.parseStructureFileScope("all")
+        );
+        assertEquals(
+                ContextBuilderApp.StructureFileScope.ALL_FILES,
+                ContextBuilderApp.parseStructureFileScope("wszystkie")
+        );
+    }
+
+    private static void shouldApplyReportFileFiltersByMode() {
+        assertTrue(ContextBuilderApp.shouldApplyReportFileFilters(
+                ContextBuilderApp.Mode.REPORT,
+                ContextBuilderApp.StructureFileScope.ALL_FILES
+        ));
+        assertTrue(ContextBuilderApp.shouldApplyReportFileFilters(
+                ContextBuilderApp.Mode.STRUCTURE,
+                ContextBuilderApp.StructureFileScope.REPORT_FILTERS
+        ));
+        assertFalse(ContextBuilderApp.shouldApplyReportFileFilters(
+                ContextBuilderApp.Mode.STRUCTURE,
+                ContextBuilderApp.StructureFileScope.ALL_FILES
+        ));
+    }
+
     private static Set<String> setOf(String... values) {
         Set<String> items = new LinkedHashSet<String>();
         for (String value : values) {
@@ -190,6 +249,21 @@ public final class ContextBuilderAppTest {
 
     private static void assertEquals(String expected, String actual) {
         if (!expected.equals(actual)) {
+            throw new AssertionError("Expected '" + expected + "' but was '" + actual + "'.");
+        }
+    }
+
+    private static void assertEquals(Set<String> expected, Set<String> actual) {
+        if (!expected.equals(actual)) {
+            throw new AssertionError("Expected '" + expected + "' but was '" + actual + "'.");
+        }
+    }
+
+    private static void assertEquals(
+            ContextBuilderApp.StructureFileScope expected,
+            ContextBuilderApp.StructureFileScope actual
+    ) {
+        if (expected != actual) {
             throw new AssertionError("Expected '" + expected + "' but was '" + actual + "'.");
         }
     }

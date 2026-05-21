@@ -71,17 +71,36 @@ const THEME_STORAGE_KEY = "kopiator-theme";
 
 let lastGeneratedText = "";
 let lastDownloadFileName = "";
+let selectedZipFile = null;
 
 initializeTheme();
+
+zipFileInput.addEventListener("change", () => {
+    selectedZipFile = getSelectedZipFile();
+    lastGeneratedText = "";
+    lastDownloadFileName = "";
+    resultOutput.value = "";
+    copyButton.disabled = true;
+    downloadButton.disabled = true;
+
+    if (!selectedZipFile) {
+        updateStatus("Czekam na archiwum ZIP.", "neutral");
+        return;
+    }
+
+    updateStatus(`Wybrano ${selectedZipFile.name}. Kliknij „Generuj wynik”.`, "success");
+});
 
 generatorForm.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const zipFile = zipFileInput.files?.[0];
+    const zipFile = getSelectedZipFile() ?? selectedZipFile;
     if (!zipFile) {
         updateStatus("Najpierw wybierz archiwum ZIP.", "error");
         return;
     }
+
+    selectedZipFile = zipFile;
 
     const formData = new FormData(generatorForm);
     const mode = formData.get("mode");
@@ -624,6 +643,13 @@ function updateStatus(message, state) {
     if (state === "success") {
         statusMessage.classList.add("is-success");
     }
+}
+
+function getSelectedZipFile() {
+    if (!zipFileInput.files || zipFileInput.files.length === 0) {
+        return null;
+    }
+    return zipFileInput.files.item(0);
 }
 
 function yieldToBrowser() {

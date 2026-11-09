@@ -3,6 +3,8 @@ import { DEFAULT_IGNORES, formatByteSize, parseList, processZipArchive } from ".
 const generatorForm = document.querySelector("#generator-form");
 const zipFileInput = document.querySelector("#zip-file");
 const dropZone = document.querySelector("#drop-zone");
+const dropOverlay = document.querySelector("#drop-overlay");
+const dragStatus = document.querySelector("#drag-status");
 const excludedFilesInput = document.querySelector("#excluded-files");
 const excludedFoldersInput = document.querySelector("#excluded-folders");
 const excludedExtensionsInput = document.querySelector("#excluded-extensions");
@@ -33,30 +35,7 @@ updateModeControls();
 updateFilterSummary();
 
 zipFileInput.addEventListener("change", () => selectZipFile(zipFileInput.files?.item(0)));
-for (const eventName of ["dragenter", "dragover"]) {
-    dropZone.addEventListener(eventName, (event) => {
-        event.preventDefault();
-        if (!isProcessing) dropZone.classList.add("is-dragging");
-    });
-}
-dropZone.addEventListener("dragleave", (event) => {
-    if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove("is-dragging");
-});
-dropZone.addEventListener("drop", (event) => {
-    event.preventDefault();
-    dropZone.classList.remove("is-dragging");
-    if (isProcessing) return;
-    const files = event.dataTransfer?.files;
-    if (files?.length !== 1) {
-        zipFileInput.value = "";
-        selectZipFile(null);
-        showFileError("Wybierz jedno archiwum ZIP naraz.");
-        return;
-    }
-    // Clear the picker so its previous FileList cannot override the dropped file.
-    zipFileInput.value = "";
-    selectZipFile(files.item(0));
-});
+initializeFileDrop();
 
 generatorForm.addEventListener("input", (event) => {
     if (event.target === zipFileInput) return;
@@ -71,7 +50,7 @@ generatorForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (isProcessing) return;
     if (!selectedZipFile) {
-        showFileError("Wybierz archiwum ZIP lub przeciągnij je do pola powyżej.");
+        showFileError("Wybierz archiwum ZIP lub przeciągnij je na stronę.");
         return;
     }
     if (!window.JSZip) {
@@ -150,10 +129,11 @@ downloadButton.addEventListener("click", () => {
 
 function selectZipFile(file) {
     selectedZipFile = null;
+    dropZone.classList.remove("has-file");
     clearResult();
     clearFileError();
     document.querySelector("#zip-file-name").textContent = "Wybierz archiwum ZIP";
-    document.querySelector("#zip-file-detail").textContent = "lub przeciągnij je tutaj";
+    document.querySelector("#zip-file-detail").textContent = "lub przeciągnij go na stronę";
     if (!file) {
         updateStatus("Wybierz ZIP, aby rozpocząć.", "neutral");
         return;
@@ -164,12 +144,92 @@ function selectZipFile(file) {
         return;
     }
     selectedZipFile = file;
+    dropZone.classList.add("has-file");
     document.querySelector("#zip-file-name").textContent = file.name;
     document.querySelector("#zip-file-detail").textContent = `${formatByteSize(file.size)} · Wybierz, aby zmienić`;
     updateStatus("Archiwum wybrane. Wygeneruj Markdown.", "neutral");
 }
 
+function initializeFileDrop() {
+    let dragDepth = 0;
+    let dismissed = false;
+
+    const isFileDrag = (event) => Array.from(event.dataTransfer?.types ?? []).includes("Files");
+    const showOverlay = () => {
+        if (isProcessing || dismissed || dropOverlay.classList.contains("is-visible")) return;
+        dropOverlay.classList.add("is-visible");
+        dropZone.classList.add("is-dragging");
+        dragStatus.textContent = "Upuść jedno archiwum ZIP w dowolnym miejscu na stronie.";
+    };
+    const hideOverlay = () => {
+        dropOverlay.classList.remove("is-visible");
+        dropZone.classList.remove("is-dragging");
+        dragStatus.textContent = "";
+    };
+    const resetDrag = () => {
+        dragDepth = 0;
+        dismissed = false;
+        hideOverlay();
+    };
+
+    window.addEventListener("dragenter", (event) => {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        dragDepth += 1;
+        showOverlay();
+    });
+    window.addEventListener("dragover", (event) => {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = isProcessing || dismissed ? "none" : "copy";
+        showOverlay();
+    });
+    window.addEventListener("dragleave", (event) => {
+        if (!isFileDrag(event) && dragDepth === 0) return;
+        dragDepth = Math.max(0, dragDepth - 1);
+        const leftWindow = !event.relatedTarget && (
+            event.clientX <= 0 || event.clientY <= 0 ||
+            event.clientX >= window.innerWidth || event.clientY >= window.innerHeight
+        );
+        if (leftWindow) {
+            resetDrag();
+        } else if (dragDepth === 0) {
+            // A child may receive dragenter immediately after its parent's dragleave.
+            requestAnimationFrame(() => { if (dragDepth === 0) resetDrag(); });
+        }
+    });
+    window.addEventListener("drop", (event) => {
+        if (!isFileDrag(event)) return;
+        // Prevent the browser from opening a dropped file, including over the editor.
+        event.preventDefault();
+        const ignoreDrop = isProcessing || dismissed;
+        resetDrag();
+        if (ignoreDrop) return;
+        const files = event.dataTransfer.files;
+        zipFileInput.value = "";
+        if (files.length !== 1) {
+            selectZipFile(null);
+            showFileError("Wybierz jedno archiwum ZIP naraz.");
+            return;
+        }
+        selectZipFile(files.item(0));
+    });
+    window.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || !dropOverlay.classList.contains("is-visible")) return;
+        dismissed = true;
+        hideOverlay();
+    });
+    window.addEventListener("dragend", resetDrag);
+    window.addEventListener("blur", resetDrag);
+    // Pointer movement resumes when a native drag ends, even if its source is outside the page.
+    window.addEventListener("pointermove", () => {
+        if (dismissed || dropOverlay.classList.contains("is-visible")) resetDrag();
+    });
+    document.addEventListener("visibilitychange", () => { if (document.hidden) resetDrag(); });
+}
+
 function showFileError(message) {
+    dropZone.classList.remove("has-file");
     zipError.hidden = false;
     zipError.textContent = message;
     zipFileInput.setAttribute("aria-invalid", "true");

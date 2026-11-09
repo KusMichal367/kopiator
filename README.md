@@ -4,7 +4,9 @@
 
 Strona w `docs/` zamienia archiwum ZIP w raport Markdown lub drzewo katalogów.
 Przetwarzanie odbywa się lokalnie w przeglądarce. Archiwum można wybrać z dysku
-lub przeciągnąć do pola wyboru.
+lub przeciągnąć w dowolne miejsce na stronie. Podczas przeciągania pojawia się
+duża strefa upuszczania, zamykana po upuszczeniu pliku, opuszczeniu okna lub
+naciśnięciu Escape. Animacje uwzględniają systemowe ustawienie ograniczonego ruchu.
 
 Sekcja **Domyślnie ignorowane** zawiera sześć niezależnych przełączników,
 wszystkie włączone przy otwarciu strony:

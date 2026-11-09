@@ -18,6 +18,7 @@
 <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
     <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="icon-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 0v6h6M8 13h8m-8 4h5"/></symbol>
     <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></symbol>
     <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
@@ -53,8 +54,8 @@
                     <label class="field-label" for="zip-file">Archiwum projektu</label>
                     <div id="drop-zone" class="drop-zone">
                         <input id="zip-file" name="zip-file" type="file" accept=".zip,application/zip" aria-describedby="zip-help zip-error" required>
-                        <svg class="icon upload-icon" aria-hidden="true"><use href="#icon-upload"/></svg>
-                        <div class="upload-copy"><span id="zip-file-name">Wybierz archiwum ZIP</span><small id="zip-file-detail">lub przeciągnij je tutaj</small></div>
+                        <span class="file-state-icon" aria-hidden="true"><svg class="icon upload-icon"><use href="#icon-upload"/></svg><svg class="icon selected-icon"><use href="#icon-check"/></svg></span>
+                        <div class="upload-copy"><span id="zip-file-name">Wybierz archiwum ZIP</span><small id="zip-file-detail">lub przeciągnij go na stronę</small></div>
                         <span class="file-badge" aria-hidden="true">ZIP</span>
                     </div>
                     <p id="zip-help" class="help-text">Pliki pozostają na Twoim urządzeniu.</p>
@@ -128,5 +129,22 @@
     </div>
     <footer class="footer"><span>ZIP zostaje u Ciebie. Markdown trafia tam, gdzie go potrzebujesz.</span><span>by Michał Kuś</span></footer>
 </main>
+<div id="drop-overlay" class="drop-overlay" aria-hidden="true">
+    <div class="drop-overlay-surface">
+        <div class="drop-overlay-content">
+            <div class="drop-illustration">
+                <svg class="icon drop-document drop-document-back"><use href="#icon-file"/></svg>
+                <div class="drop-document-front"><svg class="icon drop-document"><use href="#icon-file"/></svg><span>ZIP</span></div>
+            </div>
+            <div class="drop-overlay-copy">
+                <h2>Upuść archiwum ZIP</h2>
+                <p>Cała strona jest teraz strefą upuszczania. Po prostu puść plik.</p>
+            </div>
+            <span class="drop-overlay-privacy"><svg class="icon"><use href="#icon-shield"/></svg>Pliki pozostają na Twoim urządzeniu.</span>
+        </div>
+        <span class="drop-overlay-cancel"><kbd>Esc</kbd> Anuluj</span>
+    </div>
+</div>
+<p id="drag-status" class="sr-only" role="status" aria-live="polite"></p>
 </body>
 </html>

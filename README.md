@@ -8,6 +8,15 @@ lub przeciągnąć w dowolne miejsce na stronie. Podczas przeciągania pojawia s
 duża strefa upuszczania, zamykana po upuszczeniu pliku, opuszczeniu okna lub
 naciśnięciu Escape. Animacje uwzględniają systemowe ustawienie ograniczonego ruchu.
 
+Nad podglądem działa mała fabryka kontekstu: robocik Kopi otwiera paczkę ZIP,
+czyta pliki i podaje Markdown z drukarki. Przypomina mały komputer w sześciennej,
+biało-srebrnej obudowie: ma ekran z twarzą, przycisk zasilania i proste rączki.
+Oczy śledzą ZIP, a druga ręka zapisuje Markdown za bokiem obudowy.
+Ilustracja korzysta z SVG i CSS,
+nie pobiera dodatkowych bibliotek i nie opóźnia udostępnienia wyniku.
+Ruch można zatrzymać przyciskiem przy fabryce; jest też zatrzymywany poza
+widocznym obszarem strony i wyłączany przy systemowym ograniczeniu ruchu.
+
 Sekcja **Domyślnie ignorowane** zawiera sześć niezależnych przełączników,
 wszystkie włączone przy otwarciu strony:
 

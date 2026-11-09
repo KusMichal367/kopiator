@@ -1,4 +1,5 @@
 import { DEFAULT_IGNORES, formatByteSize, parseList, processZipArchive } from "./archive.mjs";
+import { createContextFactory } from "./factory.mjs";
 
 const generatorForm = document.querySelector("#generator-form");
 const zipFileInput = document.querySelector("#zip-file");
@@ -27,6 +28,7 @@ let lastGeneratedText = "";
 let lastDownloadFileName = "";
 let selectedZipFile = null;
 let isProcessing = false;
+const contextFactory = createContextFactory(document.querySelector("#context-factory"));
 
 initializeTheme();
 // Default exclusions start enabled on every visit, including restored forms.
@@ -70,6 +72,7 @@ generatorForm.addEventListener("submit", async (event) => {
     clearResult();
     clearFileError();
     setBusy(true);
+    contextFactory.start();
     updateStatus("Odczytuję archiwum ZIP…", "neutral");
     outputState.textContent = "Generowanie…";
     try {
@@ -88,7 +91,11 @@ generatorForm.addEventListener("submit", async (event) => {
         updateStatus(processed.stats.files === 0
             ? "Brak plików po filtrowaniu. Zmień filtry lub wybierz inne archiwum."
             : "Markdown gotowy. Skopiuj tekst lub pobierz plik .md.", "success");
-        resultOutput.focus();
+        contextFactory.complete();
+        resultOutput.focus({ preventScroll: true });
+        if (window.matchMedia("(max-width: 800px)").matches) {
+            document.querySelector(".panel-output").scrollIntoView({ block: "start", behavior: "instant" });
+        }
     } catch (error) {
         console.error(error);
         clearResult();
@@ -144,6 +151,7 @@ function selectZipFile(file) {
         return;
     }
     selectedZipFile = file;
+    contextFactory.reset(true);
     dropZone.classList.add("has-file");
     document.querySelector("#zip-file-name").textContent = file.name;
     document.querySelector("#zip-file-detail").textContent = `${formatByteSize(file.size)} · Wybierz, aby zmienić`;
@@ -229,6 +237,7 @@ function initializeFileDrop() {
 }
 
 function showFileError(message) {
+    contextFactory.fail();
     dropZone.classList.remove("has-file");
     zipError.hidden = false;
     zipError.textContent = message;
@@ -244,6 +253,7 @@ function clearFileError() {
 }
 
 function clearResult() {
+    contextFactory.reset(Boolean(selectedZipFile));
     lastGeneratedText = "";
     lastDownloadFileName = "";
     resultOutput.value = "";

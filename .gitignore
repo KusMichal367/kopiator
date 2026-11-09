@@ -10,6 +10,11 @@
 *.userosscache
 *.sln.docstates
 *.env
+.env
+.env.*
+
+# Local interface inspection artifacts
+.taste-skill/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

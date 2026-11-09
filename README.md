@@ -1,5 +1,41 @@
 # Kopiator
 
+## Wersja przeglądarkowa (GitHub Pages)
+
+Strona w `docs/` zamienia archiwum ZIP w raport Markdown lub drzewo katalogów.
+Przetwarzanie odbywa się lokalnie w przeglądarce. Archiwum można wybrać z dysku
+lub przeciągnąć do pola wyboru.
+
+Sekcja **Domyślnie ignorowane** zawiera sześć niezależnych przełączników,
+wszystkie włączone przy otwarciu strony:
+
+- `node_modules` — zainstalowane zależności,
+- `__MACOSX` — metadane archiwum,
+- `.DS_Store` — ustawienia folderów macOS,
+- `._*` — pliki pomocnicze macOS,
+- `.env` i warianty — także `.env.local`, `.env.production` oraz `*.env`,
+- pliki binarne — rozpoznawane po rozszerzeniu i zawartości.
+
+Wyłączenie przełącznika pozwala uwzględnić daną grupę. Binaria są zapisywane
+w raporcie jako nazwy i rozmiary, bez ich zawartości. Przełączniki działają
+w obu trybach, również w strukturze bez własnych filtrów plików. W tym wariancie
+nadal obowiązują własne wykluczenia folderów. Zmiana ustawień czyści poprzedni wynik.
+
+Własne wykluczenia można wpisywać po przecinku lub po jednym w wierszu.
+Wynik można skopiować do schowka albo pobrać jako plik `.md`.
+
+Podgląd lokalny (otwórz `http://localhost:8000/docs/`):
+
+```bash
+python3 -m http.server 8000
+```
+
+Testy filtrowania wersji przeglądarkowej (Node.js 22 lub nowszy):
+
+```bash
+node --test test/archive.test.mjs
+```
+
 ## Uruchamianie konsolowe
 
 Aplikacje konsolowa mozna uruchomic skryptem:

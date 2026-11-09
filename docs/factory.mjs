@@ -9,10 +9,41 @@ export function createContextFactory(root) {
     let paused = false;
     let inView = true;
     let startedAt = 0;
+    let pendingStart = false;
+    let resultReady = false;
+    let firstFrame = 0;
+    let secondFrame = 0;
 
     function cancelSequence() {
+        cancelAnimationFrame(firstFrame);
+        cancelAnimationFrame(secondFrame);
+        firstFrame = secondFrame = 0;
+        pendingStart = false;
         timers.forEach(clearTimeout);
         timers.clear();
+    }
+
+    function finishSequence() {
+        const printDelay = Math.max(0, 850 - (performance.now() - startedAt));
+        later(printDelay, "printing");
+        later(printDelay + 550, "done");
+    }
+
+    function beginVisibleSequence() {
+        if (!pendingStart || document.hidden || !inView || firstFrame || secondFrame) return;
+        // Paint the closed parcel before starting a new run, including repeated clicks.
+        firstFrame = requestAnimationFrame(() => {
+            firstFrame = 0;
+            secondFrame = requestAnimationFrame(() => {
+                secondFrame = 0;
+                if (!pendingStart || document.hidden || !inView) return;
+                pendingStart = false;
+                startedAt = performance.now();
+                root.dataset.phase = "opening";
+                later(360, "reading");
+                if (resultReady) finishSequence();
+            });
+        });
     }
 
     function later(delay, phase) {
@@ -37,6 +68,8 @@ export function createContextFactory(root) {
         if ((paused || motionPreference.matches) && root.dataset.state === "ready") {
             cancelSequence();
             root.dataset.phase = "done";
+        } else {
+            beginVisibleSequence();
         }
     }
 
@@ -58,19 +91,27 @@ export function createContextFactory(root) {
     return {
         reset(hasFile = false) {
             cancelSequence();
+            resultReady = false;
             root.dataset.state = hasFile ? "loaded" : "idle";
             root.dataset.phase = hasFile ? "loaded" : "idle";
             status.textContent = hasFile ? "Paczka czeka na uruchomienie." : "Kopi czeka na paczkę ZIP.";
         },
         start() {
             cancelSequence();
-            startedAt = performance.now();
+            firstFrame = secondFrame = 0;
+            resultReady = false;
+            pendingStart = true;
             root.dataset.state = "working";
-            root.dataset.phase = "opening";
+            root.dataset.phase = "loaded";
             status.textContent = "Kopi otwiera paczkę i czyta pliki.";
-            later(360, "reading");
+            const bounds = root.getBoundingClientRect();
+            if (bounds.top < 0 || bounds.bottom > window.innerHeight) {
+                root.scrollIntoView({ block: "center", behavior: "instant" });
+            }
+            beginVisibleSequence();
         },
         complete() {
+            resultReady = true;
             root.dataset.state = "ready";
             status.textContent = "Markdown gotowy. Możesz go już skopiować.";
             if (paused || motionPreference.matches) {
@@ -79,9 +120,7 @@ export function createContextFactory(root) {
                 return;
             }
             // A fast ZIP still gets a short story. Only the illustration waits.
-            const printDelay = Math.max(0, 850 - (performance.now() - startedAt));
-            later(printDelay, "printing");
-            later(printDelay + 550, "done");
+            if (!pendingStart) finishSequence();
         },
         fail() {
             cancelSequence();
